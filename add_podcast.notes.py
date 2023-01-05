@@ -171,8 +171,79 @@ class MyServer(BaseHTTPRequestHandler):
             page = requests.get(startURL);
             tree = html.fromstring(page.content);
             desc = '\n\n'.join(tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]/*/p[@class="intro"]/text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p/text()'));
-            print(startURL);
-            print(desc);
+#            print(startURL);
+#            print(desc);
+            if desc != "":
+                self.add_desc_to_cache(startURL,desc);
+            else:
+                print("No description found for: " + startURL);
+
+        return desc;
+
+    def handle_nachrichtenleicht(self):
+        origRSS = "https://www.nachrichtenleicht.de/nachrichtenpodcast-100.xml";
+        data = feedparser.parse(origRSS);
+
+        self.send_response(200)
+        self.send_header("Content-type", "application/rss+xml; charset=UTF-8")
+        self.end_headers()
+        
+        self.wfile.write(bytes('<?xml version="1.0" encoding="UTF-8"?>\n', "utf-8"));
+        self.wfile.write(bytes('<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:georss="http://www.georss.org/georss" xmlns:atom="http://www.w3.org/2005/Atom">', "utf-8"));
+
+        self.wfile.write(bytes('<channel>', "utf-8"));
+        self.wfile.write(bytes('<title>' + data.feed.title + '</title>', "utf-8"));
+        self.wfile.write(bytes('<link>http://' + hostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
+        self.wfile.write(bytes('<description>' + data.feed.description + '</description>', "utf-8"));
+        self.wfile.write(bytes('<language>' + data.feed.language + '</language>', "utf-8"));
+        self.wfile.write(bytes('<copyright>' + data.feed.copyright + '</copyright>', "utf-8"));
+        self.wfile.write(bytes('<pubDate>' + data.feed.published + '</pubDate>', "utf-8"));
+        self.wfile.write(bytes('<image>', "utf-8"));
+        self.wfile.write(bytes('<url>' + data.feed.image.href + '</url>', "utf-8"));
+#        self.wfile.write(bytes('<title>' + data.feed.image.title + '</title>', "utf-8"));
+#        self.wfile.write(bytes('<link>' + data.feed.image.link + '</link>', "utf-8"));
+        self.wfile.write(bytes('</image>', "utf-8"));
+        self.wfile.write(bytes('''
+  <itunes:explicit>No</itunes:explicit>
+  <itunes:author>Deutschlandfunk Nachrichtenleicht</itunes:author>
+  <itunes:owner>
+   <itunes:name>Redaktion deutschlandradio.de</itunes:name>
+   <itunes:email>hoererservice@deutschlandradio.de</itunes:email>
+  </itunes:owner>
+  <itunes:subtitle>Die Beiträge zur Sendung</itunes:subtitle>
+  <ttl>10</ttl>\n''', "utf-8"));
+
+        for item in data.entries:
+             self.wfile.write(bytes('<item>', "utf-8"));
+
+             self.wfile.write(bytes('<guid isPermaLink="false">' + item.id + '</guid>', "utf-8"));
+             self.wfile.write(bytes('<pubDate>' + item.published + '</pubDate>', "utf-8"));
+             self.wfile.write(bytes('<title>' + item.title + '</title>', "utf-8"));
+             self.wfile.write(bytes('<link>' + item.link + '</link>', "utf-8"));
+             self.wfile.write(bytes('<description>' + self.handle_nachrichtenleicht_get_item_description(data.feed,item) + '</description>', "utf-8"));
+             if 'category' in item:
+                 self.wfile.write(bytes('<category>' + item.category + '</category>', "utf-8"));
+             self.wfile.write(bytes('''
+   <itunes:author>Deutschlandfunk Nachrichtenleicht</itunes:author>''',"utf-8"));
+             if len(item.enclosures) > 0:
+                 self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
+#             self.wfile.write(bytes('<itunes:duration></itunes:duration>', "utf-8"));
+#             break;
+
+             self.wfile.write(bytes('</item>\n', "utf-8"));
+       
+        self.wfile.write(bytes('</channel>', "utf-8"));
+        self.wfile.write(bytes('</rss>', "utf-8"));
+
+    def handle_nachrichtenleicht_get_item_description(self,feed,item):
+        startURL = item.link;
+        desc = self.get_desc_from_cache(startURL);
+        if desc == "":
+            page = requests.get(startURL);
+            tree = html.fromstring(page.content);
+            desc = '\n\n'.join(tree.xpath('//*[@id="main-app"]/main/div/article/header/h1[@class="b-article-header-main"]/text()|//*[@id="main-app"]/main/div/article/header/p[@class="article-header-description"]/text()|//*[@id="main-app"]/main/div/article/div/section[@class="b-article-details"]/div/text()'));
+#            print(startURL);
+#            print(desc);
             if desc != "":
                 self.add_desc_to_cache(startURL,desc);
             else:
@@ -185,6 +256,8 @@ class MyServer(BaseHTTPRequestHandler):
             return self.handle_langsam()
         elif self.path == "/wortedewoche.rss":
             return self.handle_wortedewoche()
+        elif self.path == "/nachrichtenleicht.rss":
+            return self.handle_nachrichtenleicht()
         else:
             self.send_response(404)
             self.end_headers()
