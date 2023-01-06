@@ -26,6 +26,7 @@ def get_args():
 class MyServer(BaseHTTPRequestHandler):
     def handle_langsam(self):
         #https://pca.st/lg5c64qb
+        #https://pca.st/jy3a66cz
         origRSS = "https://rss.dw.com/xml/DKpodcast_lgn_de";
         data = feedparser.parse(origRSS);
 
@@ -112,6 +113,7 @@ class MyServer(BaseHTTPRequestHandler):
     def handle_topthema(self):
         origRSS = "http://rss.dw.com/xml/DKpodcast_topthemamitvokabeln_de";
         #https://pca.st/rozqzton
+        #https://pca.st/17wea8o6
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
@@ -207,6 +209,7 @@ class MyServer(BaseHTTPRequestHandler):
     def handle_wortderwoche(self):
         origRSS = "http://rss.dw-world.de/xml/DKpodcast_wortderwoche_de";
         #https://pca.st/sc8a9egk
+        #https://pca.st/d1zyn490
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
@@ -275,22 +278,31 @@ class MyServer(BaseHTTPRequestHandler):
         desc = self.get_desc_from_cache(startURL);
         if desc == "":
             page = requests.get(currURL);
-            # Seem to get this a lot with WortDerWoche
-            if page.status_code == 404 and "?" in currURL:
-                #Issue seems to be with multiple requests close together
-                print("Sleeping and retrying")
-                time.sleep(1)
-                page = requests.get(currURL);
-                if page.status_code == 404 and "?" in currURL:
-                    print("Trying truncated URL")
-                    currURL = currURL[:currURL.index("?")]
-                    page = requests.get(currURL);
             if page.status_code == 200:
                 tree = html.fromstring(page.content);
 #                print(etree.tostring(tree, pretty_print=True))
                 desc = '\n\n'.join(tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]//*[@class="intro"]//text()|//*/div[@id="bodyContent"]//*[@class="longText"]//text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p/text()'));
             else:
-                print(f"Returned status code {page.status_code}")
+                # Seem to get this a lot with WortDerWoche
+                if page.status_code == 404 and "www.dw.com" in currURL:
+                    currURL = currURL.replace("www.dw.com","learngerman.dw.com");
+                    print("Trying learngerman URL: " + currURL)
+                    page = requests.get(currURL);
+                if page.status_code == 404 and "?" in currURL:
+                    #Issue seems to be with multiple requests close together
+                    print("Sleeping and retrying")
+                    time.sleep(1)
+                    page = requests.get(currURL);
+                    if page.status_code == 404 and "?" in currURL:
+                        currURL = currURL[:currURL.index("?")]
+                        print("Trying truncated URL: " + currURL)
+                        page = requests.get(currURL);
+                if page.status_code == 200:
+                    tree = html.fromstring(page.content);
+#                   print(etree.tostring(tree, pretty_print=True))
+                    desc = '\n\n'.join(tree.xpath('//*[@id="root"]/div/div/div[1]/section[1]/div/article/div/div/span/p/text()'));
+                else:
+                    print(f"Returned status code {page.status_code}")
 
             if desc != "":
                 self.add_desc_to_cache(startURL,desc);
@@ -303,6 +315,7 @@ class MyServer(BaseHTTPRequestHandler):
     def handle_nachrichtenleicht(self):
         origRSS = "https://www.nachrichtenleicht.de/nachrichtenpodcast-100.xml";
         #https://pca.st/3ai80mve
+        #https://pca.st/hcehv4yy
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
