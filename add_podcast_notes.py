@@ -1,5 +1,6 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
+import argparse
 
 import feedparser
 import requests
@@ -7,13 +8,20 @@ from lxml import html, etree
 import pickle
 from shutil import copyfile
 from pathlib import Path
+from urllib.parse import urlparse, quote_plus, unquote_plus, parse_qs, quote
 
-externalHostName = "http://murraypaul.duckdns.org"
-hostName = "0.0.0.0"
-serverPort = 8082
+externalHostName = ""
+serverPort = 8080
 
 DescCache = {}
 ConfigFolder = Path(".podcast-toolbox")
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Podcast toolbox')
+    parser.add_argument('--hostname', required=True, help='External host name for podcast feed links')
+    parser.add_argument('--port', required=False, type=int, help=f'Port to run webserver on (default {serverPort})')
+
+    return parser.parse_args()
 
 class MyServer(BaseHTTPRequestHandler):
     def handle_langsam(self):
@@ -263,17 +271,27 @@ class MyServer(BaseHTTPRequestHandler):
 
     def handle_wortderwoche_get_item_description(self,feed,item):
         startURL = item.link;
-        #Seem to get 404 with ? portion included, for some words only
-        #This has moved, need to do more work
-        if "?" in startURL:
-            startURL = startURL[:startURL.index("?")]
+        currURL = startURL;
         desc = self.get_desc_from_cache(startURL);
         if desc == "":
-            page = requests.get(startURL);
-            tree = html.fromstring(page.content);
-            desc = '\n\n'.join(tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]/*/p[@class="intro"]/text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p/text()'));
-#            print(startURL);
-#            print(desc);
+            page = requests.get(currURL);
+            # Seem to get this a lot with WortDerWoche
+            if page.status_code == 404 and "?" in currURL:
+                #Issue seems to be with multiple requests close together
+                print("Sleeping and retrying")
+                time.sleep(1)
+                page = requests.get(currURL);
+                if page.status_code == 404 and "?" in currURL:
+                    print("Trying truncated URL")
+                    currURL = currURL[:currURL.index("?")]
+                    page = requests.get(currURL);
+            if page.status_code == 200:
+                tree = html.fromstring(page.content);
+#                print(etree.tostring(tree, pretty_print=True))
+                desc = '\n\n'.join(tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]//*[@class="intro"]//text()|//*/div[@id="bodyContent"]//*[@class="longText"]//text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p/text()'));
+            else:
+                print(f"Returned status code {page.status_code}")
+
             if desc != "":
                 self.add_desc_to_cache(startURL,desc);
             else:
@@ -355,17 +373,26 @@ class MyServer(BaseHTTPRequestHandler):
         return desc;
 
     def do_GET(self):
-        if self.path == "/langsam.rss":
-            return self.handle_langsam()
-        elif self.path == "/topthema.rss":
-            return self.handle_topthema()
-        elif self.path == "/wortderwoche.rss":
-            return self.handle_wortderwoche()
-        elif self.path == "/nachrichtenleicht.rss":
-            return self.handle_nachrichtenleicht()
-        else:
+        self.parsed_path = urlparse(self.path)
+        params = parse_qs(self.parsed_path.query)
+        print(params)
+        if 'app' not in params or params['app'][0] != 'podcast':
+            print("No app key")
             self.send_response(404)
             self.end_headers()
+        else:
+            print(self.parsed_path)
+            if self.parsed_path.path == "/langsam.rss":
+                return self.handle_langsam()
+            elif self.parsed_path.path == "/topthema.rss":
+                return self.handle_topthema()
+            elif self.parsed_path.path == "/wortderwoche.rss":
+                return self.handle_wortderwoche()
+            elif self.parsed_path.path == "/nachrichtenleicht.rss":
+                return self.handle_nachrichtenleicht()
+            else:
+                self.send_response(404)
+                self.end_headers()
 
     def get_desc_from_cache(self,startURL):
         global DescCache
@@ -397,8 +424,13 @@ class MyServer(BaseHTTPRequestHandler):
             copyfile(ConfigFolder / 'desccache.pickle',ConfigFolder / 'desccache.txt')
 
 if __name__ == "__main__":        
-    webServer = HTTPServer((hostName, serverPort), MyServer)
-    print("Server started http://%s:%s" % (hostName, serverPort))
+    Args = get_args()
+    externalHostName = Args.hostname
+    if Args.port:
+        serverPort = Args.port
+
+    webServer = HTTPServer(('0.0.0.0', serverPort), MyServer)
+    print("Server started on port %d" % (serverPort))
 
     try:
         webServer.serve_forever()
