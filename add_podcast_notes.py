@@ -8,15 +8,16 @@ import pickle
 from shutil import copyfile
 from pathlib import Path
 
-#hostName = "http://murraypaul.duckdns.org"
-hostName = "localhost"
-serverPort = 8081
+externalHostName = "http://murraypaul.duckdns.org"
+hostName = "0.0.0.0"
+serverPort = 8082
 
 DescCache = {}
 ConfigFolder = Path(".podcast-toolbox")
 
 class MyServer(BaseHTTPRequestHandler):
     def handle_langsam(self):
+        #https://pca.st/lg5c64qb
         origRSS = "https://rss.dw.com/xml/DKpodcast_lgn_de";
         data = feedparser.parse(origRSS);
 
@@ -28,8 +29,8 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(bytes('<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:georss="http://www.georss.org/georss" xmlns:atom="http://www.w3.org/2005/Atom">', "utf-8"));
 
         self.wfile.write(bytes('<channel>', "utf-8"));
-        self.wfile.write(bytes('<title>' + data.feed.title + '</title>', "utf-8"));
-        self.wfile.write(bytes('<link>http://' + hostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
+        self.wfile.write(bytes('<title>' + data.feed.title + '</title>\n', "utf-8"));
+        self.wfile.write(bytes('<link>http://' + externalHostName + ':' + str(serverPort) + '/' + self.path + '</link>\n', "utf-8"));
         self.wfile.write(bytes('<description>' + data.feed.description + '</description>', "utf-8"));
         self.wfile.write(bytes('<language>' + data.feed.language + '</language>', "utf-8"));
         self.wfile.write(bytes('<copyright>' + data.feed.copyright + '</copyright>', "utf-8"));
@@ -69,7 +70,7 @@ class MyServer(BaseHTTPRequestHandler):
    <itunes:explicit>clean</itunes:explicit>\n''', "utf-8"));
              if len(item.enclosures) > 0:
                  self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
-#             self.wfile.write(bytes('<itunes:duration></itunes:duration>', "utf-8"));
+             self.wfile.write(bytes('<itunes:duration>' + item.itunes_duration + '</itunes:duration>', "utf-8"));
 #             break;
 
              self.wfile.write(bytes('</item>\n', "utf-8"));
@@ -87,7 +88,7 @@ class MyServer(BaseHTTPRequestHandler):
             try:
                 targetURL = tree.xpath('//*[@id="bodyContent"]/div[1]/div[3]/div/div[2]/a/@href')[0];
             except Exception as err:
-                print(f"Exception in tree.xpath: {err=}, {type(err)=}");
+                print(f"Exception in tree.xpath: err={err}, type={type(err)}");
                 print("While handling: " + startURL);
                 return "";
             page2 = requests.get(targetURL);
@@ -102,6 +103,7 @@ class MyServer(BaseHTTPRequestHandler):
 
     def handle_topthema(self):
         origRSS = "http://rss.dw.com/xml/DKpodcast_topthemamitvokabeln_de";
+        #https://pca.st/rozqzton
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
@@ -113,7 +115,7 @@ class MyServer(BaseHTTPRequestHandler):
 
         self.wfile.write(bytes('<channel>', "utf-8"));
         self.wfile.write(bytes('<title>' + data.feed.title + '</title>', "utf-8"));
-        self.wfile.write(bytes('<link>http://' + hostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
+        self.wfile.write(bytes('<link>http://' + externalHostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
         self.wfile.write(bytes('<description>' + data.feed.description + '</description>', "utf-8"));
         self.wfile.write(bytes('<language>' + data.feed.language + '</language>', "utf-8"));
         self.wfile.write(bytes('<copyright>' + data.feed.copyright + '</copyright>', "utf-8"));
@@ -194,8 +196,9 @@ class MyServer(BaseHTTPRequestHandler):
         return desc;
 
 
-    def handle_wortedewoche(self):
+    def handle_wortderwoche(self):
         origRSS = "http://rss.dw-world.de/xml/DKpodcast_wortderwoche_de";
+        #https://pca.st/sc8a9egk
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
@@ -207,7 +210,7 @@ class MyServer(BaseHTTPRequestHandler):
 
         self.wfile.write(bytes('<channel>', "utf-8"));
         self.wfile.write(bytes('<title>' + data.feed.title + '</title>', "utf-8"));
-        self.wfile.write(bytes('<link>http://' + hostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
+        self.wfile.write(bytes('<link>http://' + externalHostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
         self.wfile.write(bytes('<description>' + data.feed.description + '</description>', "utf-8"));
         self.wfile.write(bytes('<language>' + data.feed.language + '</language>', "utf-8"));
         self.wfile.write(bytes('<copyright>' + data.feed.copyright + '</copyright>', "utf-8"));
@@ -232,7 +235,7 @@ class MyServer(BaseHTTPRequestHandler):
   </itunes:category>
   <ttl>10</ttl>\n''', "utf-8"));
 
-        count = 0;
+#        count = 0;
         for item in data.entries:
              self.wfile.write(bytes('<item>', "utf-8"));
 
@@ -240,7 +243,7 @@ class MyServer(BaseHTTPRequestHandler):
              self.wfile.write(bytes('<pubDate>' + item.published + '</pubDate>', "utf-8"));
              self.wfile.write(bytes('<title>' + item.title + '</title>', "utf-8"));
              self.wfile.write(bytes('<link>' + item.link + '</link>', "utf-8"));
-             self.wfile.write(bytes('<description>' + self.handle_wortedewoche_get_item_description(data.feed,item) + '</description>', "utf-8"));
+             self.wfile.write(bytes('<description>' + self.handle_wortderwoche_get_item_description(data.feed,item) + '</description>', "utf-8"));
              self.wfile.write(bytes('<category>' + item.category + '</category>', "utf-8"));
              self.wfile.write(bytes('''
    <itunes:author>DW.COM | Deutsche Welle</itunes:author>
@@ -248,19 +251,20 @@ class MyServer(BaseHTTPRequestHandler):
    <itunes:explicit>clean</itunes:explicit>\n''', "utf-8"));
              if len(item.enclosures) > 0:
                  self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
-#             self.wfile.write(bytes('<itunes:duration></itunes:duration>', "utf-8"));
-             count = count + 1
-             if count > 2:
-                 break;
+             self.wfile.write(bytes('<itunes:duration>' + item.itunes_duration + '</itunes:duration>', "utf-8"));
+#             count = count + 1
+#             if count > 2:
+#                 break;
 
              self.wfile.write(bytes('</item>\n', "utf-8"));
        
         self.wfile.write(bytes('</channel>', "utf-8"));
         self.wfile.write(bytes('</rss>', "utf-8"));
 
-    def handle_wortedewoche_get_item_description(self,feed,item):
+    def handle_wortderwoche_get_item_description(self,feed,item):
         startURL = item.link;
         #Seem to get 404 with ? portion included, for some words only
+        #This has moved, need to do more work
         if "?" in startURL:
             startURL = startURL[:startURL.index("?")]
         desc = self.get_desc_from_cache(startURL);
@@ -274,11 +278,13 @@ class MyServer(BaseHTTPRequestHandler):
                 self.add_desc_to_cache(startURL,desc);
             else:
                 print("No description found for: " + startURL);
+                desc = item.description
 
         return desc;
 
     def handle_nachrichtenleicht(self):
         origRSS = "https://www.nachrichtenleicht.de/nachrichtenpodcast-100.xml";
+        #https://pca.st/3ai80mve
         data = feedparser.parse(origRSS);
 
         self.send_response(200)
@@ -290,7 +296,7 @@ class MyServer(BaseHTTPRequestHandler):
 
         self.wfile.write(bytes('<channel>', "utf-8"));
         self.wfile.write(bytes('<title>' + data.feed.title + '</title>', "utf-8"));
-        self.wfile.write(bytes('<link>http://' + hostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
+        self.wfile.write(bytes('<link>http://' + externalHostName + ':' + str(serverPort) + '/' + self.path + '</link>', "utf-8"));
         self.wfile.write(bytes('<description>' + data.feed.description + '</description>', "utf-8"));
         self.wfile.write(bytes('<language>' + data.feed.language + '</language>', "utf-8"));
         self.wfile.write(bytes('<copyright>' + data.feed.copyright + '</copyright>', "utf-8"));
@@ -324,7 +330,7 @@ class MyServer(BaseHTTPRequestHandler):
    <itunes:author>Deutschlandfunk Nachrichtenleicht</itunes:author>''',"utf-8"));
              if len(item.enclosures) > 0:
                  self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
-#             self.wfile.write(bytes('<itunes:duration></itunes:duration>', "utf-8"));
+             self.wfile.write(bytes('<itunes:duration>' + item.itunes_duration + '</itunes:duration>', "utf-8"));
 #             break;
 
              self.wfile.write(bytes('</item>\n', "utf-8"));
@@ -353,8 +359,8 @@ class MyServer(BaseHTTPRequestHandler):
             return self.handle_langsam()
         elif self.path == "/topthema.rss":
             return self.handle_topthema()
-        elif self.path == "/wortedewoche.rss":
-            return self.handle_wortedewoche()
+        elif self.path == "/wortderwoche.rss":
+            return self.handle_wortderwoche()
         elif self.path == "/nachrichtenleicht.rss":
             return self.handle_nachrichtenleicht()
         else:
