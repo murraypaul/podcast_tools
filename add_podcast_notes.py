@@ -2,6 +2,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 import argparse
 
+import pprint
+
 import feedparser
 import requests
 from lxml import html, etree
@@ -80,7 +82,7 @@ class MyServer(BaseHTTPRequestHandler):
              if len(item.enclosures) > 0:
                  self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
              self.wfile.write(bytes('<itunes:duration>' + item.itunes_duration + '</itunes:duration>', "utf-8"));
-#             break;
+             #break;
 
              self.wfile.write(bytes('</item>\n', "utf-8"));
        
@@ -94,19 +96,29 @@ class MyServer(BaseHTTPRequestHandler):
             page = requests.get(startURL);
             tree = html.fromstring(page.content);
             targetURL = "";
+            # Old format
             try:
                 targetURL = tree.xpath('//*[@id="bodyContent"]/div[1]/div[3]/div/div[2]/a/@href')[0];
+
+                page2 = requests.get(targetURL);
+                tree2 = html.fromstring(page2.content);
+                desc = '\n\n'.join(tree2.xpath('//*/h2/text()|//*/p/text()'));
+                if desc != "":
+                    self.add_desc_to_cache(startURL,desc);
+                else:
+                    print("No description found for: " + startURL);
             except Exception as err:
-                print(f"Exception in tree.xpath: err={err}, type={type(err)}");
-                print("While handling: " + startURL);
-                return "";
-            page2 = requests.get(targetURL);
-            tree2 = html.fromstring(page2.content);
-            desc = '\n\n'.join(tree2.xpath('//*/h2/text()|//*/p/text()'));
-            if desc != "":
-                self.add_desc_to_cache(startURL,desc);
-            else:
-                print("No description found for: " + startURL);
+                # Current format
+                try:
+                    desc = '\n\n'.join(tree.xpath('//*[@class="main-content-area"]/article/*[@class="content-area"]/div/span/span/h2/text()|//*[@class="main-content-area"]/article/*[@class="content-area"]/div/span/p/text()'));
+                    if desc != "":
+                        self.add_desc_to_cache(startURL,desc);
+                    else:
+                        print("No description found for: " + startURL);
+                except Exception as err:
+                    print(f"Exception in tree.xpath: err={err}, type={type(err)}");
+                    print("While handling: " + startURL);
+                    return "";
 
         return desc;
 
@@ -180,24 +192,31 @@ class MyServer(BaseHTTPRequestHandler):
             tree = html.fromstring(page.content);
             targetURL = "";
             results = [];
-            #Two forms, one with text on separate page, one embedded
+            #Three forms:
+            #1 one with text on separate page
+            #2 one embedded
+            #3 one with text embedded, but tests on a separate page
             test = tree.xpath('//*[@class="start-lecture"]/a/@href');
-            if len(test) == 0:
+            if len(test) == 0: #2
                 results = tree.xpath('//*[@id="dkELearning"]/div[4]/p//text()[not(ancestor::span[@class="bubbleText"])]|//*[@id="dkELearning"]/div[4]/p//br[not(ancestor::span[@class="bubbleText"])]');
-                for result in results:
-                    if isinstance(result,str):
-                        desc = desc + result;
-                    else:
-                        desc = desc + "\n";
-            else:
-                targetURL = test[0]
-                if targetURL[0] == "/":
-                    targetURL = "https://learngerman.dw.com/" + targetURL;
-                page2 = requests.get(targetURL);
-                tree2 = html.fromstring(page2.content);
-                results = tree2.xpath('//*/div[@class="content"]/div/span/*');
                 for line in results:
                     desc = desc + line.text_content() + "\n\n";
+            else:
+                results = tree.xpath('//*[@class="main-content"]//p')
+                if len(results) > 0: #3
+                    for line in results:
+                        desc = desc + line.text_content() + "\n\n";
+                else: #1
+                    targetURL = test[0]
+                    pprint.pprint(targetURL)
+                    if targetURL[0] == "/":
+                        targetURL = "https://learngerman.dw.com/" + targetURL;
+                    page2 = requests.get(targetURL);
+                    tree2 = html.fromstring(page2.content);
+                    pprint.pprint(tree2)
+                    results = tree2.xpath('//*/div[@class="content"]/div/span/*');
+                    for line in results:
+                        desc = desc + line.text_content() + "\n\n";
             if desc != "":
                 self.add_desc_to_cache(startURL,desc);
             else:
@@ -263,9 +282,6 @@ class MyServer(BaseHTTPRequestHandler):
              if len(item.enclosures) > 0:
                  self.wfile.write(bytes('<enclosure url="' + item.enclosures[0].href + '" type="' + item.enclosures[0].type + '" length="' + item.enclosures[0].length + '"/>\n', "utf-8"));
              self.wfile.write(bytes('<itunes:duration>' + item.itunes_duration + '</itunes:duration>', "utf-8"));
-#             count = count + 1
-#             if count > 2:
-#                 break;
 
              self.wfile.write(bytes('</item>\n', "utf-8"));
        
@@ -280,8 +296,11 @@ class MyServer(BaseHTTPRequestHandler):
             page = requests.get(currURL);
             if page.status_code == 200:
                 tree = html.fromstring(page.content);
-#                print(etree.tostring(tree, pretty_print=True))
-                desc = '\n\n'.join(tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]//*[@class="intro"]//text()|//*/div[@id="bodyContent"]//*[@class="longText"]//text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p/text()'));
+                results = tree.xpath('//div[@class="main-content-area"]/article/div//p')
+                if len(results) == 0: 
+                    results = tree.xpath('//*/div[@id="bodyContent"]/*/h1/text()|//*/div[@id="bodyContent"]//*[@class="intro"]//text()|//*/div[@id="bodyContent"]//*[@class="longText"]//text()|//*[@id="bodyContent"]/div[1]/div[4]/div/p')
+                for line in results:
+                    desc = desc + line.text_content() + "\n\n";
             else:
                 # Seem to get this a lot with WortDerWoche
                 if page.status_code == 404 and "www.dw.com" in currURL:
